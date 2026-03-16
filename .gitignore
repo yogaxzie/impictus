@@ -1,0 +1,4 @@
+config/database.php
+*.log
+*.sql
+.DS_Store
