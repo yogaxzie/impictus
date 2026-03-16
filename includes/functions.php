@@ -1,40 +1,58 @@
 <?php
-function generateLoginCode($length = 6) {
-    $characters = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
-    $code = '';
-    for ($i = 0; $i < $length; $i++) {
-        $code .= $characters[rand(0, strlen($characters) - 1)];
-    }
-    return $code;
-}
+// FUNCTIONS BUILDERZ
+require_once __DIR__ . '/../config/database.php';
 
-function isLoggedIn() {
-    return isset($_SESSION['user_id']);
-}
-
-function redirect($url) {
-    header("Location: $url");
-    exit();
-}
-
-function getUserData($user_id, $conn) {
-    $query = "SELECT * FROM users WHERE id = '$user_id'";
-    $result = $conn->query($query);
-    return $result->fetch_assoc();
-}
-
-function isPremium($user_id, $conn) {
-    $user = getUserData($user_id, $conn);
-    if ($user['is_admin']) return true;
-    if ($user['is_premium']) {
-        if (strtotime($user['expired_date']) > time()) {
-            return true;
-        } else {
-            // Auto downgrade kalo expired
-            $conn->query("UPDATE users SET is_premium = FALSE WHERE id = '$user_id'");
-            return false;
+class Database {
+    private static $instance = null;
+    private $conn;
+    
+    private function __construct() {
+        try {
+            $this->conn = new PDO(
+                "mysql:host=".DB_HOST.";dbname=".DB_NAME,
+                DB_USER,
+                DB_PASS
+            );
+            $this->conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        } catch(PDOException $e) {
+            die("Connection failed: " . $e->getMessage());
         }
     }
-    return false;
+    
+    public static function getInstance() {
+        if (self::$instance == null) {
+            self::$instance = new Database();
+        }
+        return self::$instance->conn;
+    }
+}
+
+function generateCode() {
+    return 'BZ' . strtoupper(substr(md5(uniqid()), 0, 8));
+}
+
+function isExpired($expDate) {
+    return strtotime($expDate) < time();
+}
+
+function getExpDate($days = 7) {
+    return date('Y-m-d', strtotime("+$days days"));
+}
+
+function createSite($userId, $code) {
+    $db = Database::getInstance();
+    $url = 'https://builderz.my.id/' . uniqid();
+    
+    $stmt = $db->prepare("INSERT INTO websites (user_id, site_url, site_code) VALUES (?, ?, ?)");
+    $stmt->execute([$userId, $url, $code]);
+    
+    return $url;
+}
+
+function getUserSites($userId) {
+    $db = Database::getInstance();
+    $stmt = $db->prepare("SELECT * FROM websites WHERE user_id = ? ORDER BY created_at DESC");
+    $stmt->execute([$userId]);
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
 ?>
